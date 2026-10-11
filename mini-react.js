@@ -59,3 +59,42 @@ export function createElement(type, props, ...children) {
     children: normalizedChildren,
   };
 }
+
+export function renderToDOM(vnode) {
+  if (!isVNode(vnode)) {
+    throw new TypeError('renderToDOM expects a valid VNode.');
+  }
+
+  if (vnode.type === 'TEXT_ELEMENT') {
+    return document.createTextNode(vnode.props.nodeValue);
+  }
+
+  const element = document.createElement(vnode.type);
+
+  for (const [propName, propValue] of Object.entries(vnode.props)) {
+    if (propValue === null || propValue === undefined) {
+      continue;
+    }
+
+    if (propName === 'id' || propName === 'role' || propName === 'className') {
+      if (typeof propValue !== 'string') {
+        throw new TypeError(`The ${propName} prop must be a string.`);
+      }
+
+      const attributeName = propName === 'className' ? 'class' : propName;
+      element.setAttribute(attributeName, propValue);
+    } else if (propName === 'onClick') {
+      if (typeof propValue !== 'function') {
+        throw new TypeError('The onClick prop must be a function.');
+      }
+
+      element.addEventListener('click', propValue);
+    }
+  }
+
+  for (const child of vnode.children) {
+    element.appendChild(renderToDOM(child));
+  }
+
+  return element;
+}
