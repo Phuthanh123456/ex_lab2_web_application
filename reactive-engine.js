@@ -23,6 +23,8 @@ function isVNode(value) {
   return isHtmlTagName(value.type) && value.children.every(isVNode);
 }
 
+const clickCallbacks = new WeakMap();
+
 export function createTextElement(value) {
   return {
     type: 'TEXT_ELEMENT',
@@ -88,7 +90,7 @@ export function renderToDOM(vnode) {
         throw new TypeError('The onClick prop must be a function.');
       }
 
-      element.addEventListener('click', propValue);
+      clickCallbacks.set(element, propValue);
     }
   }
 
@@ -105,6 +107,24 @@ const stateEngine = (() => {
   let cursor = 0;
   let mountedComponent = null;
   let mountRoot = null;
+
+  function handleRootClick(event) {
+    let element = event.target;
+
+    if (element?.nodeType === 3) {
+      element = element.parentElement;
+    }
+
+    while (element && element !== mountRoot) {
+      const callback = clickCallbacks.get(element);
+      if (callback !== undefined) {
+        callback(event);
+        return;
+      }
+
+      element = element.parentElement;
+    }
+  }
 
   function useState(initialValue) {
     const hookPosition = cursor;
@@ -148,11 +168,24 @@ const stateEngine = (() => {
       throw new TypeError('mountApp component must be a function.');
     }
 
-    if (root === null || root === undefined || typeof root.replaceChildren !== 'function') {
-      throw new TypeError('mountApp root must support replaceChildren().');
+    if (root === null
+      || root === undefined
+      || typeof root.replaceChildren !== 'function'
+      || typeof root.addEventListener !== 'function'
+      || typeof root.removeEventListener !== 'function') {
+      throw new TypeError('mountApp root must support replaceChildren() and event listeners.');
     }
 
     mountedComponent = component;
+
+    if (mountRoot !== root) {
+      if (mountRoot !== null) {
+        mountRoot.removeEventListener('click', handleRootClick);
+      }
+
+      root.addEventListener('click', handleRootClick);
+    }
+
     mountRoot = root;
     rerenderApp();
   }
