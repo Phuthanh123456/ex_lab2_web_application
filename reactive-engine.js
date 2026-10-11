@@ -99,27 +99,68 @@ export function renderToDOM(vnode) {
   return element;
 }
 
-// Private positional storage used by the upcoming useState implementation.
+// Private positional state storage for useState.
 const stateEngine = (() => {
   const stateStore = [];
   let cursor = 0;
+  let mountedComponent = null;
+  let mountRoot = null;
 
-  function readStateAtCurrentCursor(initialValue) {
+  function useState(initialValue) {
     const hookPosition = cursor;
-    cursor += 1;
 
     if (!Object.prototype.hasOwnProperty.call(stateStore, hookPosition)) {
       stateStore[hookPosition] = initialValue;
     }
 
-    return stateStore[hookPosition];
+    cursor += 1;
+
+    function setState(nextValue) {
+      const previousValue = stateStore[hookPosition];
+      stateStore[hookPosition] = typeof nextValue === 'function'
+        ? nextValue(previousValue)
+        : nextValue;
+
+      if (mountedComponent !== null) {
+        rerenderApp();
+      }
+    }
+
+    return [stateStore[hookPosition], setState];
   }
 
   function resetCursor() {
     cursor = 0;
   }
 
-  return { readStateAtCurrentCursor, resetCursor };
+  function rerenderApp() {
+    if (mountedComponent === null || mountRoot === null) {
+      throw new Error('Cannot rerender before an app has been mounted.');
+    }
+
+    resetCursor();
+    const vnode = mountedComponent();
+    mountRoot.replaceChildren(renderToDOM(vnode));
+  }
+
+  function mountApp(component, root) {
+    if (typeof component !== 'function') {
+      throw new TypeError('mountApp component must be a function.');
+    }
+
+    if (root === null || root === undefined || typeof root.replaceChildren !== 'function') {
+      throw new TypeError('mountApp root must support replaceChildren().');
+    }
+
+    mountedComponent = component;
+    mountRoot = root;
+    rerenderApp();
+  }
+
+  return { useState, resetCursor, mountApp, rerenderApp };
 })();
 
 export const resetCursor = stateEngine.resetCursor;
+export const useState = stateEngine.useState;
+export const mountApp = stateEngine.mountApp;
+export const rerenderApp = stateEngine.rerenderApp;
